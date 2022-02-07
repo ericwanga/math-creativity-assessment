@@ -1,0 +1,346 @@
+---
+title: "Clustering Analysis for Mathematics Creativity Assessment project"
+author: "Zhengzheng Wang, wanzy120"
+date: "04/02/2022"
+output:
+  html_notebook:
+    toc: yes
+    toc_float: yes
+  pdf_document:
+    toc: yes
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r include=FALSE}
+# clear workspace
+rm(list=ls())
+```
+
+```{r, warning=FALSE, include=FALSE}
+# import
+library(mice) # imputation
+library(magrittr)
+library(cluster)
+library(dplyr)
+library(FactoMineR) # for PCA
+if(!require('clValid')) install.packages('clValid')
+library(clValid) # for auto-compare different clustering algorithms
+# plot
+library(corrplot)
+library(ggplot2)
+if(!require('factoextra')) install.packages('factoextra')
+library(factoextra)
+```
+
+# Intro
+
+
+
+
+# 1. Data exploration
+
+
+```{r}
+set.seed(420)
+# load data, assign Student ID column as row index
+data <- read.csv('./log/df3_newfeature.csv', row.names = 'ID')
+
+feat <- c('mr_scaled', 'loa_scaled')
+
+df <- data[, feat]
+summary(df)
+```
+
+
+
+Visualize
+```{r fig.cap='Correlation plot', echo=FALSE}
+# correlation plot
+cor.matrix <- cor(df, use='pair')
+diag(cor.matrix) <- 0
+corrplot(cor.matrix, type='lower', method = 'ellipse', title = '\nCorrelation of imputed behavior data')
+```
+
+## 2.2 Scaling
+
+
+
+```{r}
+# scale numerical features
+# df <- as.data.frame(scale(data))
+# summary(df)
+```
+All features are scaled to mean=0, standard deviation=1.
+
+```{r echo=FALSE}
+# boxplots after scaling
+df %>% 
+  tidyr::gather(key='feature') %>%
+  ggplot(aes(x=feature, y=value)) + 
+  geom_boxplot() +
+  ggtitle('Scaled behavior features') +
+  theme(axis.text.x = element_text(angle = 70, hjust = 1)) +
+  labs(caption = 'Fig .')
+```
+
+
+# 2. Hierachitcal clustering
+
+Get distance matrix and hierarchical clustering using different linkages.
+```{r fig.width=10, fig.height=8, fig.align='center'}
+dist.matrix <- dist(df, method = 'euclidean')
+
+# hierarchical clustering
+hc_avg <- hclust(dist.matrix, method = 'average') # average dissimilarities
+hc_ward <- hclust(dist.matrix, method = 'ward.D2') # ward linkage
+hc_complete <- hclust(dist.matrix, method = 'complete') # maximum linkage
+hc_single <- hclust(dist.matrix, method = 'single') # minimum linkage
+```
+
+
+### Dendrograms
+
+- Average linkage: pairwise dissimilarities, then take the average as distance
+- Ward's minimum variance method: minimize within-cluster variance
+- Complete, or Maximum, linkage: pairwise dissimilarities then take the largest dissimilarity value as distance
+- Single linkage: pairwise dissimilarities then take the smallest dissimilarity value as distance
+
+```{r fig.height=18, fig.width=10, echo=FALSE}
+par(mfrow=c(4,1))
+
+plot(hc_avg, cex=0.6, hang=-1)
+#rect.hclust(hc_avg, k=4, border = 2:6)
+
+plot(hc_ward, cex=0.6, hang=-1)
+#rect.hclust(hc_ward, k=4, border = 2:6)
+
+plot(hc_complete, cex=0.6, hang=-1)
+#rect.hclust(hc_complete, k=4, border = 2:6)
+
+plot(hc_single, cex=0.6, hang=-1)
+```
+
+
+Which one to choose? Get the clustering coefficients using `agnes`:
+```{r}
+m <- c('average', 'ward', 'complete', 'single')
+names(m) <- c('average', 'ward', 'complete', 'single')
+ac <- function(x){cluster::agnes(df, method = x)$ac}
+purrr::map_dbl(m, ac)
+```
+
+**Ward's minimum variance** method has the highest clustering coefficient, followed by **complete** method. 
+
+Take 4 clusters for example, look into Dendrograms from *ward* and *complete* methods:
+
+```{r fig.width=10, echo=FALSE}
+ncluster <- 4
+plot(hc_ward, cex=0.6, hang=-1)
+rect.hclust(hc_ward, k=ncluster, border = 2:6)
+#abline(h=14, col='red')
+```
+
+```{r fig.width=10, echo=FALSE}
+ncluster <- 4
+plot(hc_complete, cex=0.6, hang=-1)
+rect.hclust(hc_complete, k=ncluster, border = 2:6)
+#abline(h=10, col='red')
+```
+
+Next, will inspect the clustering results from these 2 methods.
+
+
+### Visual inspection
+
+Cut the dataframe to 2/3/4/5 clusters according to *ward*/*complete* methods, then compare the 8 results.
+```{r}
+set.seed(420)
+# use cutree function
+cut_ward.2 <- cutree(hc_ward, k=2)
+cut_complete.2 <- cutree(hc_complete, k=2)
+cut_ward.3 <- cutree(hc_ward, k=3)
+cut_complete.3 <- cutree(hc_complete, k=3)
+cut_ward.4 <- cutree(hc_ward, k=4)
+cut_complete.4 <- cutree(hc_complete, k=4)
+cut_ward.5 <- cutree(hc_ward, k=5)
+cut_complete.5 <- cutree(hc_complete, k=5)
+
+# store/map the clustering result to a new column 'cluster'
+df.hc.ward.2 <- mutate(df, cluster_hc=cut_ward.2)
+df.hc.complete.2 <- mutate(df, cluster_hc=cut_complete.2)
+df.hc.ward.3 <- mutate(df, cluster_hc=cut_ward.3)
+df.hc.complete.3 <- mutate(df, cluster_hc=cut_complete.3)
+df.hc.ward.4 <- mutate(df, cluster_hc=cut_ward.4)
+df.hc.complete.4 <- mutate(df, cluster_hc=cut_complete.4)
+df.hc.ward.5 <- mutate(df, cluster_hc=cut_ward.5)
+df.hc.complete.5 <- mutate(df, cluster_hc=cut_complete.5)
+```
+
+```{r eval=FALSE, include=TRUE}
+# count records of each cluster
+count(df.hc.ward.4, cluster_hc)
+```
+
+```{r fig.width=10, fig.height=14, echo=FALSE}
+# plot data points in scatter plot
+p1 <- factoextra::fviz_cluster(list(data = df, cluster = cut_ward.2), geom = 'point') + 
+  ggtitle('k=2, Ward')
+p2 <- factoextra::fviz_cluster(list(data = df, cluster = cut_complete.2), geom = 'point') + 
+  ggtitle('k=2, Complete (Maximum)')
+p3 <- factoextra::fviz_cluster(list(data = df, cluster = cut_ward.3), geom = 'point') + 
+  ggtitle('k=3, Ward')
+p4 <- factoextra::fviz_cluster(list(data = df, cluster = cut_complete.3), geom = 'point') + 
+  ggtitle('k=3, Complete (Maximum)')
+p5 <- factoextra::fviz_cluster(list(data = df, cluster = cut_ward.4), geom = 'point') + 
+  ggtitle('k=4, Ward')
+p6 <- factoextra::fviz_cluster(list(data = df, cluster = cut_complete.4), geom = 'point') + 
+  ggtitle('k=4, Complete (Maximum)')
+p7 <- factoextra::fviz_cluster(list(data = df, cluster = cut_ward.5), geom = 'point') + 
+  ggtitle('k=5, Ward')
+p8 <- factoextra::fviz_cluster(list(data = df, cluster = cut_complete.5), geom = 'point') + 
+  ggtitle('k=5, Complete (Maximum)')
+
+gridExtra::grid.arrange(p1,p2,p3,p4,p5,p6,p7,p8, nrow=4)
+```
+
+
+### Determine optimal clusters
+
+3 methods
+
+- Elbow method (by computing total within-cluster sum of square, WSS)
+- Average silhouette method
+- Gap statistic method (calculating the *gap* statistic, a goodness of clustering measure)
+
+```{r fig.width=10}
+set.seed(420)
+# use fviz_nbclust wrapper
+p1.hc <- fviz_nbclust(df, FUN=hcut, method='wss') + 
+  labs(subtitle = 'Hierarchical Clustering\nWSS method (Elbow)')
+p2.hc <- fviz_nbclust(df, FUN=hcut, method = 'silhouette') + 
+  labs(subtitle = 'Hierarchical Clustering\nAverage Silhouette method')
+p3.hc <- fviz_nbclust(df, FUN=hcut, method = 'gap_stat', verbose = FALSE) + 
+  labs(subtitle = 'Hierarchical Clustering\nGap statistic method')
+
+# # plot gap_stat method again by specifying some parameters
+# gap_stat.hc <- clusGap(df, FUN=hcut, K.max=8, B=500, verbose = FALSE)
+# p4.hc <- fviz_gap_stat(gap_stat.hc) + 
+#   labs(subtitle='Hierarchical Clustering\nGap statistic method (manual)\n(bootstrap.sampling=500)')
+# # Details of Gap statistic
+# print(gap_stat.hc, method='firstmax')
+
+gridExtra::grid.arrange(p1.hc,p2.hc,p3.hc, nrow=2)
+```
+
+k=4
+
+
+
+## 2.4 K-Means
+
+Crete 6 choices: number of cluster k=2,3,4,5,6,7
+```{r}
+set.seed(420)
+# add 25 initial centroid configurations then average all centroids' results
+ck.2 <- kmeans(df, centers = 2, nstart = 25)
+ck.3 <- kmeans(df, centers = 3, nstart = 25)
+ck.4 <- kmeans(df, centers = 4, nstart = 25)
+ck.5 <- kmeans(df, centers = 5, nstart = 25)
+ck.6 <- kmeans(df, centers = 6, nstart = 25)
+ck.7 <- kmeans(df, centers = 7, nstart = 25)
+```
+
+
+### Visual inspection
+```{r fig.width=10, fig.height=10, echo=FALSE}
+#factoextra::fviz_cluster(k1, data = df) + ggtitle('k = 2')
+p1 <- factoextra::fviz_cluster(ck.2, geom='point', data = df) + ggtitle('K-Means') + labs(subtitle = 'k=2')
+p2 <- factoextra::fviz_cluster(ck.3, geom='point', data = df) + ggtitle('K-Means') + labs(subtitle = 'k=3')
+p3 <- factoextra::fviz_cluster(ck.4, geom='point', data = df) + ggtitle('K-Means') + labs(subtitle = 'k=4')
+p4 <- factoextra::fviz_cluster(ck.5, geom='point', data = df) + ggtitle('K-Means') + labs(subtitle = 'k=5')
+p5 <- factoextra::fviz_cluster(ck.6, geom='point', data = df) + ggtitle('K-Means') + labs(subtitle = 'k=6')
+p6 <- factoextra::fviz_cluster(ck.7, geom='point', data = df) + ggtitle('K-Means') + labs(subtitle = 'k=7')
+
+gridExtra::grid.arrange(p1,p2,p3,p4,p5,p6, nrow=3)
+```
+
+### Determine optimal clusters
+
+3 methods
+
+- Elbow method (calculating *WSS*)
+- Average Silhouette method (the larger the better)
+- Gap statistic method (calculating the *gap* statistic, a goodness of clustering measure)
+
+```{r fig.width=10}
+set.seed(420)
+# use fviz_nbclust wrapper
+p1.km <- fviz_nbclust(df, nstart=25, FUN=kmeans, method='wss') + 
+  labs(subtitle = 'K-Means\nWSS method (Elbow)') # within-cluster sum of square
+p2.km <- fviz_nbclust(df, nstart=25, FUN=kmeans, method = 'silhouette') + 
+  labs(subtitle = 'K-Means\nAverage Silhouette method')
+p3.km <- fviz_nbclust(df, nstart=25, FUN=kmeans, method = 'gap_stat', verbose = FALSE ) + 
+  labs(subtitle='K-Means\nGap statistic method')
+
+# # gap_stat manually, using clusGap{cluster}
+# gap_stat.km <- clusGap(df, FUN=kmeans, nstart=25, K.max=8, B=300, verbose = FALSE)
+# #print(gap_stat, method='firstmax')
+# p4.km <- fviz_gap_stat(gap_stat.km) + 
+#   labs(subtitle='K-Means\nGap statistic method (manual)\n(nstart=25, bootstrap.sampling=300)')
+
+gridExtra::grid.arrange(p1.km,p2.km,p3.km, nrow=2)
+```
+
+k=4
+
+Detail of k=4
+```{r}
+ck.4
+```
+
+## 2.5 Extract results
+
+Extract clustering result and map to data.
+```{r echo=FALSE}
+# extract results to df
+#final <- kmeans(df, 4, nstart = 25)
+final <- ck.4
+df %<>% mutate(cluster_km=final$cluster)
+
+# store result from Hierarchical clustering
+df <- mutate(df, cluster_hc=cut_ward.4)
+
+head(df)
+```
+
+```{r}
+# map back to behavior data
+print(count(df, cluster_km))
+```
+
+Take cluster = 4, get the mean for each feature in each cluster, and distance between each center:
+```{r}
+# aggregate features by cluster, and return mean value
+cluster.center = aggregate(df[1:2], list(cluster=cut_ward.4), mean)
+dist.between.center <- dist(cluster.center[,-1])
+print(list(cluster_center=cluster.center, dist_between_center=dist.between.center))
+```
+
+
+
+# 3. Merge results
+
+Merge results and write to file
+```{r echo=FALSE}
+# merge with Grades
+data2 <- tibble::rownames_to_column(data, 'ID')
+df2 <- tibble::rownames_to_column(df, 'ID')
+
+df.final <- merge(data2, df2[c(1,4,5)], by='ID')
+df.final %>% write.csv('./log/df3_newfeature_cluster.csv', row.names = FALSE)
+```
+
+
