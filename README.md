@@ -1,8 +1,8 @@
 The included codes are for **Automatic Assessment of Creativity using Natural Language Processing**.
 
-RMarkdown code is the clustering analysis using level of disagreement and mean rating to obtain target labels.
+In folder `clustering_analysis`, the RMarkdown code is the clustering analysis using level of disagreement and mean rating to obtain target labels.
 
-Jupyter notebook is for data preprocessing, Bidrectional LSTM model and Transformer Encoder model.
+In folder `models_lstmandtransformer`, the Jupyter notebook is for data preprocessing, Bidrectional LSTM model and Transformer Encoder model.
 
 If you find the code useful, please consider citing our work:
 
